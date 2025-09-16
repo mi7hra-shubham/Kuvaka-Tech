@@ -107,19 +107,27 @@ Respond ONLY in JSON with two fields:
 
     try:
         # Disable streaming: wait for the full response
+        headers = {
+           "User-Agent": "Mozilla/5.0",
+            "Content-Type": "application/json",
+        }
         response = requests.post(
             "https://kuvaka-ollama.loca.lt/api/generate",
             json={
                 "model": "qwen3:4b",
                 "prompt": prompt,
                 "stream": False  
-            },
+            }, 
+            headers=headers,
             timeout= 600
         )
 
         # Get the model output
+        print("Status:", response.status_code)
+        print("Text:", response.text[:500])
+
         raw_output = response.json().get("response", "")
-        print("AI Response:", raw_output[:200])  # Optional: preview first 200 chars
+        # print("AI Response:", raw_output[:200])  # Optional: preview first 200 chars
 
         # Parse the JSON returned by the model
         parsed = extract_json(raw_output)
