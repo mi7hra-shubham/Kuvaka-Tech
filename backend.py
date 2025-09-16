@@ -5,6 +5,7 @@ import csv
 import io
 import requests
 import json
+import re
 
 app = FastAPI()
 
@@ -64,61 +65,213 @@ def data_completeness_score(lead: dict) -> int:
 
 
 # AI REASONING (via OLLAMA)
+# def ai_reasoning_for_lead(offer, lead, rule_score: int) -> dict:
+#     print("AI call initiated")
+#     prompt = f"""
+#     You are an SDR assistant.
+#     Here is the product offer:
+#     - Name: {offer.name}
+#     - Value Props: {", ".join(offer.value_props)}
+#     - Ideal ICPs: {", ".join(offer.ideal_use_cases)}
+
+#     Here is the lead:
+#     - Name: {lead.get('name')}
+#     - Role: {lead.get('role')}
+#     - Company: {lead.get('company')}
+#     - Industry: {lead.get('industry')}
+#     - Location: {lead.get('location')}
+#     - LinkedIn Bio: {lead.get('linkedin_bio')}
+
+#     Rule-based score: {rule_score} (out of 50)
+
+#     Task: Classify the lead's buying intent as High, Medium, or Low.
+#     - High = strongly matches ICP, role, and likely buyer intent.
+#     - Medium = partial fit or some doubts.
+#     - Low = weak or unlikely buyer intent.
+
+#     Respond ONLY in JSON with two fields:
+#     {{
+#       "intent_label": "High" | "Medium" | "Low",
+#       "reasoning": "short explanation"
+#     }}
+#     """
+
+#     try:
+#         response = requests.post(
+#             "http://localhost:11434/api/generate",
+#             json={
+#                 "model": "qwen3:4b",  
+#                 "prompt": prompt,
+#                 "stream": False
+#             },
+#             timeout=300
+#         )
+#         data = response.json()
+#         raw_text = data.get("response", "")
+
+
+#         try:
+#             parsed = json.loads(raw_text)
+#             return {
+#                 "intent_label": parsed.get("intent_label", "Medium"),
+#                 "reasoning": parsed.get("reasoning", "No reasoning provided")
+#             }
+#         except json.JSONDecodeError:
+#             return {
+#                 "intent_label": "Medium",
+#                 "reasoning": f"Could not parse JSON, raw output: {raw_text[:200]}"
+#             }
+
+#     except Exception as e:
+#         return {
+#             "intent_label": "Low",
+#             "reasoning": f"Ollama error: {str(e)}"
+#         }
+
+def extract_json(raw_output: str):
+    # Remove <think> ... </think> blocks
+    cleaned = re.sub(r"<think>.*?</think>", "", raw_output, flags=re.DOTALL).strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        return None
+
+
+# def ai_reasoning_for_lead(offer, lead, rule_score: int) -> dict:
+#     print("AI call initiated")
+#     prompt = f"""
+#     You are an SDR assistant.
+#     Here is the product offer:
+#     - Name: {offer.name}
+#     - Value Props: {", ".join(offer.value_props)}
+#     - Ideal ICPs: {", ".join(offer.ideal_use_cases)}
+
+#     Here is the lead:
+#     - Name: {lead.get('name')}
+#     - Role: {lead.get('role')}
+#     - Company: {lead.get('company')}
+#     - Industry: {lead.get('industry')}
+#     - Location: {lead.get('location')}
+#     - LinkedIn Bio: {lead.get('linkedin_bio')}
+
+#     Rule-based score: {rule_score} (out of 50)
+
+#     Task: Classify the lead's buying intent as High, Medium, or Low.
+#     - High = strongly matches ICP, role, and likely buyer intent.
+#     - Medium = partial fit or some doubts.
+#     - Low = weak or unlikely buyer intent.
+
+#     Respond ONLY in JSON with two fields:
+#     {{
+#       "intent_label": "High" | "Medium" | "Low",
+#       "reasoning": "short explanation"
+#     }}
+#     """
+
+#     try:
+#         with requests.post(
+#             "http://localhost:11434/api/generate",
+#             json={
+#                 "model": "qwen3:4b",
+#                 "prompt": prompt,
+#                 "stream": True
+#             },
+#             stream=True,
+#             timeout=300
+#         ) as r:
+#             raw_output = ""
+#             for line in r.iter_lines():
+#                 if line:
+#                     data = json.loads(line.decode("utf-8"))
+#                     if "response" in data:
+#                         chunk = data["response"]
+#                         raw_output += chunk
+#                         print(chunk, end="", flush=True)  # 🔴 Realtime print
+#                     if data.get("done", False):
+#                         print("\n--- Generation Complete ---")
+#                         break
+
+        
+#         # Try parsing the collected output into JSON
+#         parsed = extract_json(raw_output)
+#         if parsed:
+#             return {
+#                 "intent_label": parsed.get("intent_label", "Medium"),
+#                 "reasoning": parsed.get("reasoning", "No reasoning provided")
+#             }
+#         else:
+#             return {
+#                 "intent_label": "Medium",
+#                 "reasoning": f"Could not parse JSON, raw output: {raw_output[:200]}"
+#             }
+
+
+#     except Exception as e:
+#         return {
+#             "intent_label": "Low",
+#             "reasoning": f"Ollama error: {str(e)}"
+#         }
+
+
 def ai_reasoning_for_lead(offer, lead, rule_score: int) -> dict:
     print("AI call initiated")
     prompt = f"""
-    You are an SDR assistant.
-    Here is the product offer:
-    - Name: {offer.name}
-    - Value Props: {", ".join(offer.value_props)}
-    - Ideal ICPs: {", ".join(offer.ideal_use_cases)}
+You are an SDR assistant.
+Here is the product offer:
+- Name: {offer.name}
+- Value Props: {", ".join(offer.value_props)}
+- Ideal ICPs: {", ".join(offer.ideal_use_cases)}
 
-    Here is the lead:
-    - Name: {lead.get('name')}
-    - Role: {lead.get('role')}
-    - Company: {lead.get('company')}
-    - Industry: {lead.get('industry')}
-    - Location: {lead.get('location')}
-    - LinkedIn Bio: {lead.get('linkedin_bio')}
+Here is the lead:
+- Name: {lead.get('name')}
+- Role: {lead.get('role')}
+- Company: {lead.get('company')}
+- Industry: {lead.get('industry')}
+- Location: {lead.get('location')}
+- LinkedIn Bio: {lead.get('linkedin_bio')}
 
-    Rule-based score: {rule_score} (out of 50)
+Rule-based score: {rule_score} (out of 50)
 
-    Task: Classify the lead's buying intent as High, Medium, or Low.
-    - High = strongly matches ICP, role, and likely buyer intent.
-    - Medium = partial fit or some doubts.
-    - Low = weak or unlikely buyer intent.
+Task: Classify the lead's buying intent as High, Medium, or Low.
+- High = strongly matches ICP, role, and likely buyer intent.
+- Medium = partial fit or some doubts.
+- Low = weak or unlikely buyer intent.
 
-    Respond ONLY in JSON with two fields:
-    {{
-      "intent_label": "High" | "Medium" | "Low",
-      "reasoning": "short explanation"
-    }}
-    """
+Respond ONLY in JSON with two fields:
+{{
+  "intent_label": "High" | "Medium" | "Low",
+  "reasoning": "short explanation"
+}}
+"""
 
     try:
+        # Disable streaming: wait for the full response
         response = requests.post(
             "http://localhost:11434/api/generate",
             json={
-                "model": "qwen3:4b",  
+                "model": "qwen3:4b",
                 "prompt": prompt,
-                "stream": False
+                "stream": False  
             },
-            timeout=300
+            timeout= 600
         )
-        data = response.json()
-        raw_text = data.get("response", "")
 
+        # Get the model output
+        raw_output = response.json().get("response", "")
+        print("AI Response:", raw_output[:200])  # Optional: preview first 200 chars
 
-        try:
-            parsed = json.loads(raw_text)
+        # Parse the JSON returned by the model
+        parsed = extract_json(raw_output)
+        if parsed:
+            print("returning from /score")
             return {
                 "intent_label": parsed.get("intent_label", "Medium"),
                 "reasoning": parsed.get("reasoning", "No reasoning provided")
             }
-        except json.JSONDecodeError:
+        else:
             return {
                 "intent_label": "Medium",
-                "reasoning": f"Could not parse JSON, raw output: {raw_text[:200]}"
+                "reasoning": f"Could not parse JSON, raw output: {raw_output[:200]}"
             }
 
     except Exception as e:
