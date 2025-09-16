@@ -21,7 +21,12 @@ JSON Body as: {
 }
 
 2. https://kuvaka-tech-8lup.onrender.com/leads/upload ( use Postman since thunderClient doesnt offer free fileUploading  )
-Create a .csv file with the format specified and pass it into the form-data of body.
+Create a .csv file with the format specified and pass it into the form-data of body: 
+.csv file content: 
+name,role,company,industry,location,linkedin_bio
+Ava Patel,Head of Growth,FlowMetrics,B2B SaaS mid-market,NY,"10 years in SaaS"
+John Doe,Engineer,DataCorp,Analytics,Boston,"Building data pipelines"
+
 
 3. https://kuvaka-tech-8lup.onrender.com/score
 This calculates the score and stores it in result locally.
@@ -58,6 +63,6 @@ Testing output: [
   }
 ]
 
-
-
+NOTE:
+The setup steps can easily be read in the commit history.
 Since I am running Ollama locally and using my PC as a server, I request you to evaluate as early as possible from your end.
