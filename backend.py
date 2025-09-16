@@ -108,7 +108,7 @@ Respond ONLY in JSON with two fields:
     try:
         # Disable streaming: wait for the full response
         response = requests.post(
-            "http://localhost:11434/api/generate",
+            "https://kuvaka-ollama.loca.lt/api/generate",
             json={
                 "model": "qwen3:4b",
                 "prompt": prompt,
