@@ -108,9 +108,11 @@ Respond ONLY in JSON with two fields:
     try:
         # Disable streaming: wait for the full response
         headers = {
-           "User-Agent": "Mozilla/5.0",
-            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "*/*",
+            "Host": "kuvaka-ollama.loca.lt",
         }
+
         response = requests.post(
             "https://kuvaka-ollama.loca.lt/api/generate",
             json={
