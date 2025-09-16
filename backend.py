@@ -107,20 +107,13 @@ Respond ONLY in JSON with two fields:
 
     try:
         # Disable streaming: wait for the full response
-        headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "*/*",
-            "Host": "kuvaka-ollama.loca.lt",
-        }
-
         response = requests.post(
-            "https://kuvaka-ollama.loca.lt/api/generate",
+            "https://32296faf5dcc.ngrok-free.app/api/generate",
             json={
                 "model": "qwen3:4b",
                 "prompt": prompt,
                 "stream": False  
-            }, 
-            headers=headers,
+            },
             timeout= 600
         )
 
