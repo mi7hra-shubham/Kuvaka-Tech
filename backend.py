@@ -107,21 +107,14 @@ Respond ONLY in JSON with two fields:
 
     try:
         # Disable streaming: wait for the full response
-        headers = {
-            "Content-Type": "application/json",
-            "User-Agent": "python-requests/2.x",
-            "Accept": "*/*",
-            "Host": "32296faf5dcc.ngrok-free.app",
-        }
 
         response = requests.post(
-            "https://32296faf5dcc.ngrok-free.app/api/generate",
+            "https://ed870fd063c6.ngrok-free.app/api/generate",
             json={
                 "model": "qwen3:4b",
                 "prompt": prompt,
                 "stream": False  
             }, 
-            headers=headers,
             timeout= 600
         )
 
