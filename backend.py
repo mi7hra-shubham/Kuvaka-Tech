@@ -3,55 +3,32 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import csv
 import io
+import requests
+import json
 
 app = FastAPI()
 
-#storing the input from /offer and /leads in the memory for now
+# storing the input from /offer and /leads in memory for now
 STATE = {
     "offer": None,
-    "leads": []
+    "leads": [],
+    "results": []
 }
 
-
+# MODELS
 class ProductOffer(BaseModel):
     name: str
     value_props: list[str]
     ideal_use_cases: list[str]
 
-@app.post("/offer")
-async def post_offer(offer: ProductOffer):
-    STATE["offer"] = offer
-    return {"status": "ok", "offer": STATE["offer"]}
 
-@app.post("/leads/upload")
-async def upload_leads(file: UploadFile = File(...)):
-    if not file.filename.endswith('.csv'):
-        return JSONResponse(status_code=400, content={"error": "File must be a CSV"})
-    content = file.file.read().decode('utf-8')
-    reader = csv.DictReader(io.StringIO(content))
-    leads = [row for row in reader]
-    STATE["leads"].extend(leads)
-    return {"status": "ok", "count": len(STATE["leads"]), "leads": STATE["leads"]}
-
-#Checking if the data is being stored locally
-@app.get("/offer")
-async def get_offer():
-    if not STATE["offer"]:
-        return {"offer": None, "message": "No offer uploaded yet"}
-    return STATE["offer"]
-
-
-@app.get("/leads")
-async def get_leads():
-    if not STATE["leads"]:
-        return {"leads": [], "message": "No leads uploaded yet"}
-    return STATE["leads"]
-
-
-
-#Rule based scoring
-DECISION_MAKER_KEYWORDS = ["head", "vp", "vice", "director", "chief", "cto", "ceo", "cxo", "founder", "owner", "manager"]
-INFLUENCER_KEYWORDS = ["lead", "senior", "principal", "engineer", "architect", "analyst", "specialist", "advisor"]
+# RULE-BASED SCORING HELPERS
+DECISION_MAKER_KEYWORDS = [
+    "head", "vp", "vice", "director", "chief", "cto", "ceo","cxo", "founder", "owner", "manager"
+]
+INFLUENCER_KEYWORDS = [
+    "lead", "senior", "principal", "engineer", "architect",  "analyst", "specialist", "advisor"
+]
 
 def classify_role_relevance(role: str) -> int:
     if not role:
@@ -69,11 +46,9 @@ def classify_industry_match(lead_industry: str, offer_icps: list[str]) -> int:
     if not lead_industry:
         return 0
     li = lead_industry.strip().lower()
-    # Exact match
     for icp in offer_icps:
         if icp.strip().lower() == li:
             return 20
-    # Adjacent match (substring check)
     for icp in offer_icps:
         icpl = icp.strip().lower()
         if icpl in li or li in icpl:
@@ -88,36 +63,131 @@ def data_completeness_score(lead: dict) -> int:
     return 10
 
 
-#Testing the rule based scoring
+# AI REASONING (via OLLAMA)
+def ai_reasoning_for_lead(offer, lead, rule_score: int) -> dict:
+    print("AI call initiated")
+    prompt = f"""
+    You are an SDR assistant.
+    Here is the product offer:
+    - Name: {offer.name}
+    - Value Props: {", ".join(offer.value_props)}
+    - Ideal ICPs: {", ".join(offer.ideal_use_cases)}
+
+    Here is the lead:
+    - Name: {lead.get('name')}
+    - Role: {lead.get('role')}
+    - Company: {lead.get('company')}
+    - Industry: {lead.get('industry')}
+    - Location: {lead.get('location')}
+    - LinkedIn Bio: {lead.get('linkedin_bio')}
+
+    Rule-based score: {rule_score} (out of 50)
+
+    Task: Classify the lead's buying intent as High, Medium, or Low.
+    - High = strongly matches ICP, role, and likely buyer intent.
+    - Medium = partial fit or some doubts.
+    - Low = weak or unlikely buyer intent.
+
+    Respond ONLY in JSON with two fields:
+    {{
+      "intent_label": "High" | "Medium" | "Low",
+      "reasoning": "short explanation"
+    }}
+    """
+
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": "qwen3:4b",  
+                "prompt": prompt,
+                "stream": False
+            },
+            timeout=300
+        )
+        data = response.json()
+        raw_text = data.get("response", "")
+
+
+        try:
+            parsed = json.loads(raw_text)
+            return {
+                "intent_label": parsed.get("intent_label", "Medium"),
+                "reasoning": parsed.get("reasoning", "No reasoning provided")
+            }
+        except json.JSONDecodeError:
+            return {
+                "intent_label": "Medium",
+                "reasoning": f"Could not parse JSON, raw output: {raw_text[:200]}"
+            }
+
+    except Exception as e:
+        return {
+            "intent_label": "Low",
+            "reasoning": f"Ollama error: {str(e)}"
+        }
+
+
+# API ENDPOINTS
+@app.post("/offer")
+async def post_offer(offer: ProductOffer):
+    STATE["offer"] = offer
+    return {"status": "ok", "offer": STATE["offer"]}
+
+@app.post("/leads/upload")
+async def upload_leads(file: UploadFile = File(...)):
+    if not file.filename.endswith('.csv'):
+        return JSONResponse(status_code=400, content={"error": "File must be a CSV"})
+    content = file.file.read().decode('utf-8')
+    reader = csv.DictReader(io.StringIO(content))
+    leads = [row for row in reader]
+    STATE["leads"].extend(leads)
+    return {"status": "ok", "count": len(STATE["leads"]), "leads": STATE["leads"]}
+
+@app.get("/offer")
+async def get_offer():
+    return STATE["offer"] or {"message": "No offer uploaded yet"}
+
+@app.get("/leads")
+async def get_leads():
+    return STATE["leads"] or {"message": "No leads uploaded yet"}
+
 @app.post("/score")
 async def run_rule_scoring():
     offer = STATE.get("offer")
     leads = STATE.get("leads", [])
     if not offer:
-        raise JSONResponse(status_code=400, content="No offer uploaded. Use POST /offer first.")
+        return JSONResponse(status_code=400, content="No offer uploaded. Use POST /offer first.")
     if not leads:
-        raise JSONResponse(status_code=400, content="No leads uploaded. Use POST /leads/upload first.")
+        return JSONResponse(status_code=400, content="No leads uploaded. Use POST /leads/upload first.")
 
     results = []
     for lead in leads:
-        role_score = classify_role_relevance(lead["role"])
-        industry_score = classify_industry_match(lead["industry"], offer["ideal_use_cases"])
+        role_score = classify_role_relevance(lead.get("role", ""))
+        industry_score = classify_industry_match(lead.get("industry", ""), offer.ideal_use_cases)
         completeness_score = data_completeness_score(lead)
 
         rule_score = role_score + industry_score + completeness_score
+        ai_result = ai_reasoning_for_lead(offer, lead, rule_score)
 
         results.append({
-            "name": lead["name"],
-            "role": lead["role"],
-            "company": lead["company"],
-            "industry": lead["industry"],
+            "name": lead.get("name"),
+            "role": lead.get("role"),
+            "company": lead.get("company"),
+            "industry": lead.get("industry"),
             "score": rule_score,
             "rule_breakdown": {
                 "role": role_score,
                 "industry": industry_score,
                 "completeness": completeness_score
-            }
+            },
+            "ai_intent": ai_result["intent_label"],
+            "ai_reasoning": ai_result["reasoning"]
         })
 
     STATE["results"] = results
     return {"status": "ok", "count": len(results)}
+
+@app.get("/results")
+async def get_results():
+    return STATE.get("results", [])
